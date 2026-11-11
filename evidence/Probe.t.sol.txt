@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+import {Vm, IERC20, IFeeConfig, IRewardPoolBuilders, IBuilders, ITreasury} from "../src/Interfaces.sol";
+
+contract ProbeTest {
+    Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+    address internal constant BUILDERS = 0x42BB446eAE6dca7723a9eBdb81EA88aFe77eF4B9;
+    address internal constant TREASURY = 0x9eba628581896ce086cb8f1A513ea6097A8FC561;
+    address internal constant MOR = 0x7431aDa8a591C955a994a21710752EF9b882b8e3;
+    uint256 internal constant PIN = 56040152;
+    event R(string k, uint256 v);
+    event RA(string k, address v);
+    event RB(string k, bytes32 v);
+
+    function setUp() public { vm.createSelectFork("https://base-mainnet.public.blastapi.io", PIN); }
+
+    function testProbe() public {
+        IBuilders b = IBuilders(BUILDERS);
+        emit R("block_number", block.number);
+        emit R("block_timestamp", block.timestamp);
+        emit R("subnetCreationFeeAmount", b.subnetCreationFeeAmount());
+        emit R("minimalWithdrawLockPeriod", b.minimalWithdrawLockPeriod());
+        emit R("networkShare", b.networkShare());
+        emit RA("feeConfig", b.feeConfig());
+        emit RA("buildersTreasury", b.buildersTreasury());
+        emit RA("depositToken", b.depositToken());
+        emit RA("rewardPool", b.rewardPool());
+        (uint256 u1, uint256 rate, uint256 totalDep, uint256 u2) = b.allSubnetsData();
+        emit R("all_rate", rate); emit R("all_totalDeposited", totalDep);
+        (uint256 dist, uint256 undist, uint256 claimed, uint128 lastUpd) = b.allSubnetsDataV4();
+        emit R("v4_distributed", dist); emit R("v4_undistributed", undist); emit R("v4_claimed", claimed); emit R("v4_lastUpdate", lastUpd);
+        emit R("treasury_MOR_balance", IERC20(MOR).balanceOf(TREASURY));
+        emit R("builders_MOR_balance", IERC20(MOR).balanceOf(BUILDERS));
+        emit RA("treasury_builders_ptr", ITreasury(TREASURY).builders());
+        emit R("treasury_distributedRewards", ITreasury(TREASURY).distributedRewards());
+        emit R("getCurrentSubnetsRewards", b.getCurrentSubnetsRewards());
+        // claim fee
+        (uint256 feePart, address feeTreas) = IFeeConfig(b.feeConfig()).getFeeAndTreasuryForOperation(BUILDERS, bytes32("claim"));
+        emit R("claim_feePart_PRECISION1e25", feePart); emit RA("claim_fee_treasury", feeTreas);
+        (uint256 feePart2, address feeTreas2) = IFeeConfig(b.feeConfig()).getFeeAndTreasuryForOperation(BUILDERS, bytes32("buildersV4.fee.subnet.create"));
+        emit R("create_feePart", feePart2); emit RA("create_fee_treasury", feeTreas2);
+        // reward pool accrual rates: rewards for pool 3 over various windows ending now
+        IRewardPoolBuilders rp = IRewardPoolBuilders(b.rewardPool());
+        uint128 now128 = uint128(block.timestamp);
+        emit R("rp3_rewards_1day", rp.getPeriodRewards(3, now128 - 1 days, now128));
+        emit R("rp3_rewards_30day", rp.getPeriodRewards(3, now128 - 30 days, now128));
+        emit R("rp3_rewards_90day", rp.getPeriodRewards(3, now128 - 90 days, now128));
+        emit R("rp3_rewards_365day", rp.getPeriodRewards(3, now128 - 365 days, now128));
+        // candidate names unregistered?
+        string[6] memory names = ["LegitBuilderAI","AcmeBuildersXYZ","NovaComputeLab","SquattestBuilderOne","MorpheusBuilderAlpha","OpenBuilderCollective"];
+        for (uint256 i=0;i<names.length;i++) {
+            bytes32 id = b.getSubnetId(names[i]);
+            bytes32 ido = b.getSubnetIdOld(names[i]);
+            (, address admin,,,,,) = b.subnets(id);
+            (, address adminO,,,,,) = b.subnets(ido);
+            emit RB("id", id); emit RA("admin_new", admin); emit RA("admin_old", adminO);
+        }
+        // MOR deal (forge-std StdCheats method: probe balance storage slot, store amount)
+        address fresh = address(uint160(0xD001));
+        bool ok = false;
+        for (uint256 i = 0; i < 30 && !ok; i++) {
+            bytes32 loc = keccak256(abi.encode(fresh, i));
+            bytes32 prev = vm.load(MOR, loc);
+            vm.store(MOR, loc, bytes32(uint256(12345 ether)));
+            if (IERC20(MOR).balanceOf(fresh) == 12345 ether) { ok = true; emit R("deal_slot_found", i); }
+            else { vm.store(MOR, loc, prev); }
+        }
+        emit R("deal_ok_1yes", ok ? 1 : 0);
+        emit R("deal_MOR_balance_fresh", IERC20(MOR).balanceOf(fresh));
+    }
+}
