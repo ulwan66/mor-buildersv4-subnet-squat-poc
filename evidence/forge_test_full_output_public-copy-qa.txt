@@ -1,0 +1,9 @@
+PACKAGING QA RE-RUN — public copy (h-mor-04-public), 2026-11-12.
+This run was executed by the agent for packaging QA only. It does NOT satisfy
+programme §5, which requires the operator (reporter) to personally run the PoC
+to a passing result before submission.
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.09s (10.14ms CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.21s (4.53ms CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 1.26s (14.46ms CPU time)
+Ran 3 test suites in 1.26s (3.56s CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
